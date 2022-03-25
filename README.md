@@ -8,7 +8,7 @@ Env: default/main.yml # have var info
   tassk/monitor_backup_nic_health_check.yml > task playbook
 
 Run the role based playbook
-ansible-playbook -i inv.ev -e role_name=testrole -e role_action=monitor_backup_nic_health_check master_test.yml
+ansible-playbook -i inv.env -e role_name=testrole -e role_action=monitor_backup_nic_health_check master_test.yml
 
 what is not working and not showing gateway info.
 - name: "Check {{ bknicipsroutes_file }} for Backup"
