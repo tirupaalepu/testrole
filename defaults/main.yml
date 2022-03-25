@@ -1,0 +1,14 @@
+---
+# defaults file for unix_support_utilities_infra
+
+# backup_nic defaults
+host: "{{ inventory_hostname }}"
+bknicipsroutes_file: files/bknicipsroutes.csv
+backup_networks1: ['172.21.0.0/24','172.22.0.0/24','172.23.0.0/24','172.24.0.0/24','172.25.0.0/24','172.26.0.0/24']
+#ip_range_est1: ['172.28.','172.21.','172.22.','172.23.','172.24.','172.25.','172.26.']
+ip_range_est1: ['172.28.','172.28.']
+ip_range_est2: ['172.31.','172.30.','172.27.','172.16.']
+if_config_path: /sbin/ifconfig
+output_dir: /tmp
+output_file: output.csv
+
