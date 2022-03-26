@@ -1,5 +1,5 @@
 
-
+Checking Backup NIC status
 
 Goal: Check the vlan 2) If vlan match or exist in ifconfig output , get the gateway from bknicipsroutes.csv inventory , check the gatwaystatus in routing table , create the final report uisng jinga , send an email with attachment
 
