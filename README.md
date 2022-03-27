@@ -20,7 +20,7 @@ what is not working and not showing gateway info.
 
 - debug: var=east1_gateway
 
-2) Remove ignore_errors: yes nad add error hadling - not adding any error hadling methods 
+2) Remove ignore_errors: yes andn add error hadling - not adding any error hadling methods 
 3) Create a final report using jinga template
 
 
