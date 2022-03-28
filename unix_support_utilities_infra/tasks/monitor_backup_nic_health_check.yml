@@ -1,0 +1,11 @@
+---
+- setup:
+
+- name: Show interfaces details
+  debug: msg="Myhost is {{ est1_backup_nic_ip }}"
+
+- name: My message
+  debug: msg="Myhost is {{ est1_backup_gateway }}"
+
+- debug: var=ansible_all_ipv4_addresses
+

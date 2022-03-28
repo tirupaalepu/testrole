@@ -1,0 +1,183 @@
+---
+- setup:
+
+- name: get hostname facts
+  set_fact:
+    hostname: "{{ ansible_hostname }}"
+  register: host1
+
+
+- name: "Check if Configured Interface in {{ ip_range_est1 }}"
+  set_fact:
+    ip_range_est1_configured: true
+  with_items: "{{ ip_range_est1 }}"
+  when: ansible_all_ipv4_addresses is search(item)
+
+- debug:
+    msg: "{{ ip_range_est1_configured|default(false) }}"
+
+- name: "Check if Configured Interface in {{ ip_range_est2 }}"
+  set_fact:
+    ip_range_est2_configured: true
+  with_items: "{{ ip_range_est2 }}"
+  when: ansible_all_ipv4_addresses is search(item)
+
+- name: "Check {{ bknicipsroutes_file }} for Backup"
+  set_fact:
+    east1_gateway: "{{ lookup('csvfile', host1 +' file=bknicipsroutes.csv delimiter=, col=2') }}"
+    #debug: msg="{{ lookup('csvfile', hostvars[inventory_hostname] + ' ' +' file=bknicipsroutes.csv delimiter=, col=2') }}"
+    #east1_gateway: "{{ lookup('csvfile', ansible_hostname ' + ' file=' + bknicipsroutes_file + ' delimiter=, col=2') }}"
+    #east1_gateway: "{{ lookup('csvfile', ansible_nodename + '-bak' + ' file=' + bknicipsroutes_file + ' delimiter=,') }}"
+
+- debug: var=east1_gateway
+
+- name: "Get Route Info"
+  shell: 'netstat -rn'
+  register: route_info
+- debug: var=route_info
+
+- name: "Check if East1 Gateway is Configured"
+  set_fact:
+    east1_gateway_configured: true
+  when: route_info.stdout_lines is search(' '+east1_gateway+' .* UG ')
+
+- debug: var=east1_gateway_configured|default(false)
+
+- name: "Ping East1 Gateway"
+  shell: "ping -q -c 1 -W 1 {{ east1_gateway }}"
+  when: east1_gateway_configured|default(false) == true
+  register: ping_east1_gateway
+
+
+- meta: end_play
+- name: "Check IFCONFIG Path"
+  stat:
+    path: "{{ if_config_path }}"
+  register: is_usr_sbin
+
+- name: "Setup IFCONFIG"
+  when: not is_usr_sbin.stat.exists
+  set_fact:
+    if_config_path: /usr/sbin/ifconfig
+
+- name: "Print ifconfig Path"
+  debug:
+    msg: "ifconfig path is {{ if_config_path }}"
+
+- name: "Set Host"
+  shell: "hostname | cut -d. -f1"
+  register: backup_interface_host
+
+
+- name: "Check Configured IPv4 Addresses Against Range"
+  set_fact:
+    ip_range1: true
+  when: ansible_all_ipv4_addresses|split('.')[0:1]
+- name: "Check {{ ip_range_est1 }}"
+  shell: "{{ if_config_path }} -a | egrep '{{ ip_range_est1 }}'"
+  register: condition_one
+  ignore_errors: yes
+
+- name: "Check {{ ip_range_est2 }}"
+  when: condition_one.rc != 0
+  shell: "{{ if_config_path }} -a |egrep '{{ ip_range_est2 }}'"
+  register: condition_two
+  ignore_errors: yes
+
+
+# IF Condition One is Set
+- name: "set EST1GW"
+  when: condition_one.rc == 0
+  shell: "grep {{ host.stdout }} {{ bknicipsroutes_file }} | awk -F ',' '{print $3}'"
+  register: EST1GW
+
+- name: "Set EST1GW_STATUS"
+  when: condition_one.rc == 0
+  shell: "netstat -rn | grep {{ EST1GW.stdout }} | grep 'UG' |tail -1"
+  register: EST1GW_STATUS
+  ignore_errors: yes
+
+- name: "Check EST1GW_STATUS"
+  when: condition_one.rc == 0
+  set_fact:
+    GWSTATUS: "East1 {% if EST1GW_STATUS.stdout == '' %}BKGW Not Found and Check the backup network interface {% else %}BKGW and Backup network inteface is up{% endif %}"
+
+- name: "BKNETSTATUS EST1GW"
+  when: condition_one.rc == 0
+  shell: "ping -q -c 1 -W 1 {{ EST1GW.stdout }} >/dev/null"
+  register: test_gw_conn1
+  ignore_errors: yes
+
+- name: "Check BKNETSTATUS"
+  when: condition_one.rc == 0
+  set_fact:
+    BKNETSTATUS: "{% if test_gw_conn1.stdout == '' %}Backup network interface is up{% else %}Backup network interface is down{% endif %}"
+
+# IF Condition Two is Set
+- name: "set EST2GW"
+  when: condition_one.rc != 0 and condition_two.rc == 0
+  shell: "grep {{ host.stdout }} {{ bknicipsroutes_file }} |awk -F ',' '{print $5}'"
+  register: EST2GW
+
+- name: "Set EST2GW_STATUS"
+  when: condition_one.rc != 0 and condition_two.rc == 0
+  shell: "netstat -rn |grep {{ EST2GW.stdout }} |grep 'UGH'|tail -1"
+  register: EST2GW_STATUS
+  ignore_errors: yes
+
+- name: "Check EST2GW_STATUS"
+  when: condition_one.rc != 0 and condition_two.rc == 0
+  set_fact:
+    GWSTATUS: "East2 {% if EST2GW_STATUS.stdout == '' %}BKGW Not Found and Check the backup network interface {% else %}BKGW and Network interface is up{% endif %}"
+
+- name: "BKNETSTATUS EST2GW"
+  when: condition_one.rc != 0 and condition_two.rc == 0
+  shell: "ping -q -c 1 -W 1 {{ EST2GW.stdout }} >/dev/null"
+  register: test_gw_conn2
+  ignore_errors: yes
+
+- name: "Check BKNETSTATUS"
+  when: condition_one.rc != 0 and test_gw_conn2 == 0
+  set_fact:
+    BKNETSTATUS: "East2 {% if test_gw_conn2.stdout == '' %} Backup network interface is up {% else %} Backup network interface is down {% endif %}"
+
+- debug:
+    msg: "BKNETSTATUS: {{ BKNETSTATUS }}"
+
+- debug:
+    msg: "GWSTATUS: {{ GWSTATUS }}"
+
+- name: "Remove existing csv file"
+  file:
+     path: '/tmp/backup_network_status.csv'
+     state: absent
+  delegate_to: localhost
+  run_once: True
+
+- name: Add the column name
+  shell: echo "Host, Backup Netwrok Status" >> /tmp/backup_network_status.csv
+  delegate_to: localhost
+  run_once: True
+
+- name: Save results
+  shell: echo "{{ inventory_hostname }},{{ GWSTATUS }}" >> /tmp/backup_network_status.csv
+  delegate_to: localhost
+
+- name: Sending backup nic status report
+  mail:
+    host: localhost
+    port: 25
+    subject: |
+             AG Backup Network Inteface Status from Ansible {{ ansible_hostname }}
+    body: |
+          Unix Support Team, If you see the message in attached file "The BKGW Not Found and Check the backup network interface down" means the backup NIC is either not active or was never configured. Please cross check with server owner.
+    from: Thiru Paalepu <tirupaalepu@yahoo.com>
+    to:
+    - Thiru Paalepu <tirupaalepu@yahoo.com>
+    attach:
+    - /tmp/backup_network_status.csv
+    headers:
+    - Reply-To=tirupaalepu@freddiemac.com
+    charset: us-ascii
+  delegate_to: localhost
+  run_once: True

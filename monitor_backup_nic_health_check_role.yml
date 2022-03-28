@@ -1,0 +1,6 @@
+---
+- name: use motd role playbook
+  hosts: localhost 
+
+  roles:
+    - role: unix_support_utilities_infra 
